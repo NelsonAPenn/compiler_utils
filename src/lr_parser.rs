@@ -123,7 +123,6 @@ enum Action<'a>
 
 pub struct LRParser<'a>
 {
-    grammar: Grammar,
     parse_table: HashMap<(u32, Symbol), Action<'a> >,
     stack: Vec<StackSymbol>
 }
@@ -134,7 +133,6 @@ impl<'a> LRParser<'a>
     {
         let parse_table = LRParser::build_table(&grammar);
         LRParser{
-            grammar,
             parse_table,
             stack: Vec::<StackSymbol>::new()
         }
@@ -174,8 +172,7 @@ impl<'a> LRParser<'a>
             }
         }
 
-
-        panic!("Not implemented");
+        Ok(())
     }
 
     fn build_table<'b>(grammar: &Grammar) -> HashMap<(u32, Symbol), Action<'a>>
