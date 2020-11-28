@@ -6,7 +6,6 @@ pub mod lr_parser;
 
 #[cfg(test)]
 mod tests {
-    use std::collections::VecDeque;
     use crate::grammar::Grammar;
     use crate::symbol::Symbol;
     use crate::ll_parser::LLParser;
