@@ -2,6 +2,7 @@ use std::collections::{HashMap};
 use crate::symbol::Symbol;
 use crate::grammar::Grammar;
 
+#[derive(Debug, Clone, Eq, PartialEq)]
 struct StackSymbol
 {
     symbol: Symbol,
@@ -63,19 +64,19 @@ impl<'a> std::fmt::Display for BookmarkedRule<'a>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
     {
-        write!(f, "{} ->", self.lhs);
+        write!(f, "{} ->", self.lhs).unwrap();
         for (index, s) in self.rhs.iter().enumerate()
         {
             if Some(index as u32) == self.bookmark
             {
-                write!(f, " ~");
+                write!(f, " ~").unwrap();
             }
 
-            write!(f, " {}", s);
+            write!(f, " {}", s).unwrap();
         }
         if let Some(goto) = self.goto
         {
-            write!(f, " goto {}", goto);
+            write!(f, " goto {}", goto).unwrap();
         }
         Ok(())
     }
@@ -92,7 +93,7 @@ impl<'a> State<'a>
     pub fn advance_dot(&mut self, next_symbol: &Symbol)
     {
         self.kernel.advance_dot(next_symbol);
-        for item in self.closure
+        for item in self.closure.iter_mut()
         {
             item.advance_dot(next_symbol);
         }
@@ -103,12 +104,12 @@ impl<'a> std::fmt::Display for State<'a>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
     {
-        writeln!(f, "==============================\n{}\n------------------------------", self.kernel);
+        writeln!(f, "==============================\n{}\n------------------------------", self.kernel).unwrap();
         for item in &self.closure
         {
-            writeln!(f, " {}", item);
+            writeln!(f, " {}", item).unwrap();
         }
-        writeln!(f, "==============================");
+        writeln!(f, "==============================").unwrap();
         Ok(())
     }
 }
@@ -131,8 +132,7 @@ impl<'a> LRParser<'a>
 {
     pub fn new(grammar: Grammar) -> LRParser<'a>
     {
-        let mut all_states = Vec::<State>::new();
-        let parse_table = LRParser::build_table(&grammar, &mut all_states);
+        let parse_table = LRParser::build_table(&grammar);
         LRParser{
             grammar,
             parse_table,
@@ -151,7 +151,7 @@ impl<'a> LRParser<'a>
             let next_token = remaining_input.pop().unwrap();
             let temp = (current_state, next_token);
             let action = &self.parse_table.get(&temp).ok_or( "parse error" )?;
-            let (current_state, next_token) = temp;
+            let (_current_state, next_token) = temp;
             match action
             {
                 Action::Shift(state) => {
@@ -166,7 +166,7 @@ impl<'a> LRParser<'a>
                 Action::Reduce( (lhs, rhs) ) => {
                     for item in rhs.iter().rev()
                     {
-                        assert_eq!(handle.pop().unwrap(), item);
+                        assert_eq!(handle.pop().unwrap().symbol, *item);
                     }
                     
                     remaining_input.push(lhs.clone());
@@ -178,10 +178,13 @@ impl<'a> LRParser<'a>
         panic!("Not implemented");
     }
 
-    fn build_table<'b>(grammar: &Grammar, all_states: &'b mut Vec<State>) -> HashMap<(u32, Symbol), Action<'a>>
+    fn build_table<'b>(grammar: &Grammar) -> HashMap<(u32, Symbol), Action<'a>>
     {
         let parse_table = HashMap::<(u32, Symbol), Action<'a>>::new();
-        let work_list = Vec::<&'b State>::new();
+        let all_states = Vec::<State>::new();
+        let mut work_list = Vec::<&State>::new();
+        work_list.push(&all_states[0]);
+
 
 
         parse_table
