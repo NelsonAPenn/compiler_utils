@@ -1,6 +1,5 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::fs::read_to_string;
-use std::fmt::{Display, Result, Formatter};
 use crate::symbol::Symbol;
 
 #[derive(Debug)]

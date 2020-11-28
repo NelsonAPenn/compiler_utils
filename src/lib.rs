@@ -1,20 +1,23 @@
-mod grammar;
-mod symbol;
-mod ll_parser;
-mod lr_parser;
+pub mod grammar;
+pub mod symbol;
+pub mod ll_parser;
+pub mod lr_parser;
 
-use grammar::Grammar;
-use ll_parser::LLParser;
-use lr_parser::LRParser;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::collections::VecDeque;
+    use crate::grammar::Grammar;
+    use crate::symbol::Symbol;
+    use crate::ll_parser::LLParser;
+    use crate::lr_parser::LRParser;
 
     #[test]
     fn it_works() {
         let grammar = Grammar::from_file("data/bnf");
         println!("{:#?}", grammar);
         let parser = LRParser::new(grammar); 
+        let program: Vec::<Symbol> = vec![];
+        parser.parse(&program);
     }
 }
