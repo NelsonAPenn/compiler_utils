@@ -9,6 +9,14 @@ struct StackSymbol
     state: u32
 }
 
+impl std::fmt::Display for StackSymbol
+{
+    fn fmt(&self, f: &'_ mut std::fmt::Formatter) -> std::fmt::Result
+    {
+        write!(f, "[{} {}]", self.symbol, self.state)
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialOrd, Ord)]
 struct BookmarkedRule
 {
@@ -103,13 +111,14 @@ impl State
 enum Action
 {
     Shift(u32), // Shift (State)
-    Reduce( (Symbol, u32) ) // Reduce (Rule)
+    Reduce( (Symbol, u32) ), // Reduce (Rule)
+    Accept
 }
 
 pub struct LRParser
 {
     grammar: Grammar,
-    parse_table: HashMap<(u32, Symbol), Action >,
+    parse_table: HashMap<(u32, Option<Symbol>), Action >,
 }
 
 impl LRParser
@@ -118,7 +127,7 @@ impl LRParser
     {
         let mut parser = LRParser{
             grammar: grammar,
-            parse_table: HashMap::<(u32, Symbol), Action>::new()
+            parse_table: HashMap::<(u32, Option<Symbol>), Action>::new()
         };
 
         parser.build_table();
@@ -209,18 +218,32 @@ impl LRParser
         consider_list.into_iter().collect::<Vec<BookmarkedRule>>()
     }
 
-    pub fn parse(&self, program: &Vec<Symbol>) -> Result<(), String>
+    pub fn parse(&self, program: String) -> Result<(), String>
     {
-        let mut handle = Vec::<StackSymbol>::new();
-        let mut remaining_input: Vec<Symbol> = program.iter().map(|x| x.clone()).rev().collect::<Vec<Symbol>>();
 
-        while !remaining_input.is_empty()
+        let mut handle = Vec::<StackSymbol>::new();
+        let mut remaining_input = program
+            .split_whitespace()
+            .map(|x| Symbol::from(x.to_string()) )
+            .rev()
+            .collect::<Vec<Symbol>>();
+
+        'parse: loop
         {
-            println!("handle: {:?}", handle);
-            println!("remaining_input: {:?}", remaining_input);
+            print!("handle:");
+            for stack_symbol in handle.iter()
+            {
+                print!(" {}", stack_symbol);
+            }
+            print!("\nremaining_input: ");
+            for symbol in remaining_input.iter().rev()
+            {
+                print!(" {}", symbol);
+            }
+            println!("\n");
 
             let current_state = handle.last().map(|s| s.state).unwrap_or(0);
-            let next_token = remaining_input.pop().unwrap();
+            let next_token = remaining_input.pop();
             let temp = (current_state, next_token);
             let action = &self.parse_table.get(&temp).ok_or( "parse error" )?;
             let (_current_state, next_token) = temp;
@@ -230,7 +253,7 @@ impl LRParser
                     handle.push(
                         StackSymbol
                         {
-                            symbol: next_token,
+                            symbol: next_token.unwrap(),
                             state: *state
                         }
                     );
@@ -241,7 +264,14 @@ impl LRParser
                         assert_eq!(handle.pop().unwrap().symbol, *item);
                     }
                     
+                    if let Some(next_token) = next_token
+                    {
+                        remaining_input.push(next_token);
+                    }
                     remaining_input.push(lhs.clone());
+                },
+                Action::Accept => {
+                    break 'parse
                 }
             }
         }
@@ -280,7 +310,7 @@ impl LRParser
         };
         let kernel = vec![BookmarkedRule
         {
-            lhs: start_symbol,
+            lhs: start_symbol.clone(),
             rhs_id: 0,
             bookmark: Some(0),
             goto: None
@@ -360,7 +390,7 @@ impl LRParser
                     let old_state = &mut all_states[state_id as usize];
                     old_state.closure.iter_mut().chain(old_state.kernel.iter_mut()).nth(index as usize).unwrap().goto = Some(new_state_id);
                 }
-                self.parse_table.insert( (state_id, next_symbols[kernel_index].clone()), Action::Shift(new_state_id));
+                self.parse_table.insert( (state_id, Some(next_symbols[kernel_index].clone())), Action::Shift(new_state_id));
             }
         }
 
@@ -371,24 +401,34 @@ impl LRParser
         }
 
         // REDUCES
+        self.parse_table.insert( (0, Some(start_symbol)), Action::Accept);
         for state in all_states.iter()
         {
             let rules_to_check = state.closure.iter().chain(state.kernel.iter());
 
             for rule in rules_to_check{
                 if let None = rule.bookmark{
-                    for symbol in self.grammar.terminals.iter().chain(self.grammar.nonterminals.iter())
+                    for symbol in self.grammar.terminals.iter()
+                        .chain(
+                            self.grammar.nonterminals.iter()
+                        )
+                        .map(|symbol| Some(symbol.clone()))
+                        .chain(vec![None].into_iter())
                     {
-                        let table_tuple = (state.id, symbol.clone());
+                        let table_tuple = (state.id, symbol);
                         if let Some(action) = self.parse_table.get( &table_tuple )
                         {
+                            let (_, symbol) = table_tuple;
                             match action
                             {
-                                Action::Shift(next_state) => {
-                                    panic!("Shift-reduce conflict at state {} with symbol {}.", state.id, symbol);
+                                Action::Shift(_next_state) => {
+                                    panic!("Shift-reduce conflict at state {} with symbol {:?}.", state.id, symbol);
                                 },
-                                Action::Reduce(rule_id) => {
-                                    panic!("Reduce-reduce conflict at state {} with symbol {}.", state.id, symbol);
+                                Action::Reduce(_rule_id) => {
+                                    panic!("Reduce-reduce conflict at state {} with symbol {:?}.", state.id, symbol);
+                                },
+                                Action::Accept => {
+                                    panic!("What in the world!?");
                                 }
                             }
                         }
@@ -439,8 +479,20 @@ fn test_state_building()
 
     for (key, value) in parser.parse_table.iter()
     {
-        println!("({}, {}): {:?}", key.0, key.1, value);
+        if let Some(symbol) = &key.1
+        {
+            println!("({}, {}): {:?}", key.0, symbol, value);
+        }
+        else
+        {
+            println!("({}, None): {:?}", key.0, value);
+
+        }
     }
+
+    parser.parse(String::from("plus plus num num num $")).unwrap();
+
+
 }
 #[test]
 fn test_neverending()
