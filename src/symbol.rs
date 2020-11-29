@@ -1,6 +1,6 @@
 use std::fmt::{Display, Result, Formatter};
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, PartialOrd, Ord)]
 pub struct Symbol
 {
     pub label: String,

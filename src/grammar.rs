@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque, HashSet};
 use std::fs::read_to_string;
 use crate::symbol::Symbol;
 
@@ -6,7 +6,9 @@ use crate::symbol::Symbol;
 pub struct Grammar
 {
     tokens_iter:VecDeque<String>,
-    pub productions: HashMap<Symbol, Vec<Vec<Symbol>>>
+    pub productions: HashMap<Symbol, Vec<Vec<Symbol>>>,
+    pub nonterminals: HashSet<Symbol>,
+    pub terminals: HashSet<Symbol>
 }
 
 impl Grammar
@@ -18,12 +20,19 @@ impl Grammar
         let mut grammar = Grammar
         {
             tokens_iter: tokens_iter,
-            productions: HashMap::<Symbol, Vec<Vec<Symbol>>>::new()
+            productions: HashMap::<Symbol, Vec<Vec<Symbol>>>::new(),
+            nonterminals: HashSet::<Symbol>::new(),
+            terminals: HashSet::<Symbol>::new()
         };
 
         grammar.parse();
 
         grammar
+    }
+
+    pub fn get_rhs(&self, lhs: &Symbol, rhs_id: u32) -> Option<&Vec<Symbol>>
+    {
+        self.productions.get(&lhs).map(|list| &list[rhs_id as usize])
     }
 
     fn parse(&mut self)
@@ -62,9 +71,26 @@ impl Grammar
 
     }
 
+    fn read_symbol(&mut self) -> Symbol
+    {
+        let symbol = Symbol::from(self.next());
+
+        if symbol.terminal
+        {
+            self.terminals.insert(symbol.clone());
+        }
+        else
+        {
+            self.nonterminals.insert(symbol.clone());
+        }
+
+        symbol
+    }
+
     fn parse_rule(&mut self) -> (Symbol, Vec<Vec<Symbol>>)
     {
-        let lhs = Symbol::from(self.next());
+        let lhs = self.read_symbol();
+
         self.expect("->");
         let mut prod_list = Vec::<Vec<Symbol>>::new();
         prod_list.push(self.parse_rhs());
@@ -92,7 +118,7 @@ impl Grammar
 
         while !self.next_symbol_is(";") && !self.next_symbol_is("|")
         {
-            out.push(Symbol::from(self.next()));
+            out.push(self.read_symbol());
         }
 
         out

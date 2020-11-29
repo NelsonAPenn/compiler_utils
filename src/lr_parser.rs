@@ -9,32 +9,130 @@ struct StackSymbol
     state: u32
 }
 
-#[derive(Debug, Clone, Hash)]
-struct BookmarkedRule<'a>
+#[derive(Debug, Clone, Hash, PartialOrd, Ord)]
+struct BookmarkedRule
 {
     pub lhs: Symbol,
-    pub rhs: &'a Vec<Symbol>,
+    pub rhs_id: u32,
 
     // the index of the next symbol in the rule to handle, or none if done
     pub bookmark: Option<u32>,
     pub goto: Option<u32>
 }
 
-impl<'a> Eq for BookmarkedRule<'a> { }
+impl Eq for BookmarkedRule { }
 
-impl<'a> PartialEq for BookmarkedRule<'a>
+impl PartialEq for BookmarkedRule
 {
     fn eq(&self, other: &Self) -> bool
     {
-        return self.lhs == other.lhs && self.rhs == other.rhs && self.bookmark == other.bookmark;
+        return self.lhs == other.lhs && self.rhs_id == other.rhs_id && self.bookmark == other.bookmark;
     }
 }
 
-impl<'a> BookmarkedRule<'a>
+impl BookmarkedRule
 {
-    pub fn new(lhs: Symbol, rhs: &'a Vec<Symbol>) -> BookmarkedRule
+    #[allow(dead_code)]
+    fn print(&self, grammar: &Grammar)
     {
-        let bookmark = if rhs.is_empty()
+        print!("{} ->", self.lhs);
+        for (index, s) in grammar.get_rhs(&self.lhs, self.rhs_id).unwrap().iter().enumerate()
+        {
+            if Some(index as u32) == self.bookmark
+            {
+                print!(" ~");
+            }
+
+            print!(" {}", s);
+        }
+        if let None = self.bookmark
+        {
+            print!(" ~");
+        }
+        if let Some(goto) = self.goto
+        {
+            print!(" goto {}", goto);
+        }
+
+    }
+
+}
+
+struct State
+{
+    pub id: u32,
+    pub kernel: Vec<BookmarkedRule>,
+    pub closure: Vec<BookmarkedRule>
+}
+
+impl PartialEq for State
+{
+    fn eq(&self, other: &Self) -> bool
+    {
+        return self.kernel == other.kernel;
+    }
+}
+
+impl Eq for State {}
+
+impl State
+{
+    #[allow(dead_code)]
+    fn print(&self, grammar: &Grammar)
+    {
+        print!("\n==============================\n");
+        for item in &self.kernel
+        {
+            print!(" ");
+            item.print(&grammar);
+            println!("");
+        }
+        println!("------------------------------");
+        for item in &self.closure
+        {
+            print!(" ");
+            item.print(&grammar);
+            println!("");
+        }
+        println!("==============================");
+    }
+}
+
+
+#[derive(Debug)]
+enum Action
+{
+    Shift(u32), // Shift (State)
+    Reduce( (Symbol, u32) ) // Reduce (Rule)
+}
+
+pub struct LRParser
+{
+    grammar: Grammar,
+    parse_table: HashMap<(u32, Symbol), Action >,
+}
+
+impl LRParser
+{
+    pub fn new(grammar: Grammar) -> LRParser
+    {
+        let mut parser = LRParser{
+            grammar: grammar,
+            parse_table: HashMap::<(u32, Symbol), Action>::new()
+        };
+
+        parser.build_table();
+        parser
+    }
+
+    fn get_rhs(&self, lhs: &Symbol, rhs_id: u32) -> Option<&Vec<Symbol>>
+    {
+        self.grammar.get_rhs(lhs, rhs_id)
+    }
+
+    fn build_bookmarked_rule(&self, lhs: Symbol, rhs_id: u32) -> BookmarkedRule
+    {
+        let bookmark = if self.get_rhs(&lhs, rhs_id).unwrap().is_empty()
         {
             None
         }
@@ -45,130 +143,13 @@ impl<'a> BookmarkedRule<'a>
 
         BookmarkedRule{
             lhs,
-            rhs,
+            rhs_id,
             bookmark,
             goto: None
         }
     }
-    // pub fn with_dot_advanced(&self, next_symbol: &Symbol) -> BookmarkedRule<'a>
-    // {
-    //     let mut clone = self.clone();
-    //     if let Some(index) = self.bookmark
-    //     {
-    //         if self.rhs[index as usize] == *next_symbol
-    //         {
-    //             clone.bookmark = 
-    //                 if index < self.rhs.len() as u32 - 1
-    //                 {
-    //                     Some(index + 1)
-    //                 }
-    //                 else
-    //                 {
-    //                     None
-    //                 };
-    //         }
-    //     }
-    //     clone
-    // }
 
-}
-
-impl<'a> std::fmt::Display for BookmarkedRule<'a>
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
-    {
-        write!(f, "{} ->", self.lhs).unwrap();
-        for (index, s) in self.rhs.iter().enumerate()
-        {
-            if Some(index as u32) == self.bookmark
-            {
-                write!(f, " ~").unwrap();
-            }
-
-            write!(f, " {}", s).unwrap();
-        }
-        if let Some(goto) = self.goto
-        {
-            write!(f, " goto {}", goto).unwrap();
-        }
-        Ok(())
-    }
-}
-
-struct State<'a>
-{
-    pub id: u32,
-    pub kernel: BookmarkedRule<'a>,
-    pub closure: Vec<BookmarkedRule<'a>>
-}
-
-impl<'a> PartialEq for State<'a>
-{
-    fn eq(&self, other: &Self) -> bool
-    {
-        return self.kernel == other.kernel;
-    }
-}
-
-impl<'a> Eq for State<'a> {}
-
-impl<'a> State<'a>
-{
-    // pub fn with_dot_advanced(&mut self, next_symbol: &Symbol)
-    // {
-    //     self.kernel.advance_dot(next_symbol);
-    //     for item in self.closure.iter_mut()
-    //     {
-    //         item.advance_dot(next_symbol);
-    //     }
-    // }
-}
-
-impl<'a> std::fmt::Display for State<'a>
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
-    {
-        writeln!(f, "==============================\n {}\n------------------------------", self.kernel).unwrap();
-        for item in &self.closure
-        {
-            writeln!(f, " {}", item).unwrap();
-        }
-        writeln!(f, "==============================").unwrap();
-        Ok(())
-    }
-}
-
-
-enum Action<'a>
-{
-    Shift(u32), // Shift (State)
-    Reduce( (Symbol, &'a Vec<Symbol>) ) // Reduce (Rule)
-}
-
-pub struct LRParser<'a>
-{
-    all_states: Vec<State<'a>>,
-    work_list: Vec<&'a State<'a>>,
-    grammar: Grammar,
-    parse_table: HashMap<(u32, Symbol), Action<'a> >,
-}
-
-impl<'a> LRParser<'a>
-{
-    pub fn new(grammar: Grammar) -> LRParser<'a>
-    {
-        let mut parser = LRParser{
-            all_states: vec![],
-            work_list: vec![], 
-            grammar: grammar,
-            parse_table: HashMap::<(u32, Symbol), Action<'a>>::new()
-        };
-
-        parser.build_table();
-        parser
-    }
-
-    fn build_state(&'a self, kernel: BookmarkedRule<'a>, id: u32) -> State<'a>
+    fn build_state(&self, kernel: Vec<BookmarkedRule>, id: u32) -> State
     {
         let closure = self.build_closure(&kernel);
         State
@@ -180,34 +161,34 @@ impl<'a> LRParser<'a>
 
     }
 
-    fn build_closure(&'a self, kernel: &BookmarkedRule<'a>) -> Vec<BookmarkedRule<'a>>
+    fn build_closure(&self, kernel: &Vec<BookmarkedRule>) -> Vec<BookmarkedRule>
     {
 
-        let mut consider_list = HashSet::<BookmarkedRule<'a>>::new();
-        consider_list.insert(
-            kernel.clone()
-        );
+        let mut consider_list = kernel
+            .clone()
+            .into_iter()
+            .collect::<HashSet<BookmarkedRule>>();
 
         loop 
         {
             let initial_length = consider_list.len().clone();
 
-            let mut new_items = Vec::<BookmarkedRule<'a>>::new();
+            let mut new_items = Vec::<BookmarkedRule>::new();
 
             for rule_to_consider in consider_list.iter()
             {
                 if let Some(bookmark) = rule_to_consider.bookmark
                 {
-                    let next_symbol = &rule_to_consider.rhs[bookmark as usize];
+                    let next_symbol = &self.get_rhs(&rule_to_consider.lhs, rule_to_consider.rhs_id).unwrap()[bookmark as usize];
                     if !next_symbol.terminal
                     {
                         if let Some(productions) = self.grammar.productions.get(next_symbol)
                         {
                             new_items.append(
-                                &mut productions
-                                .iter()
-                                .map(|x| BookmarkedRule::new(next_symbol.clone(), x))
-                                .collect::<Vec<BookmarkedRule<'a>>>());
+                                &mut (0..productions.len()).map(
+                                    |index|
+                                    self.build_bookmarked_rule(next_symbol.clone(), index as u32)
+                                ).collect::<Vec<BookmarkedRule>>());
                         }
                     }
                 }
@@ -224,17 +205,20 @@ impl<'a> LRParser<'a>
             }
         }
 
-        consider_list.retain(|x| x != kernel);
-        consider_list.into_iter().collect::<Vec<BookmarkedRule<'a>>>()
+        consider_list.retain(|x| !kernel.contains(x));
+        consider_list.into_iter().collect::<Vec<BookmarkedRule>>()
     }
 
-    pub fn parse(&'a self, program: &Vec<Symbol>) -> Result<(), String>
+    pub fn parse(&self, program: &Vec<Symbol>) -> Result<(), String>
     {
         let mut handle = Vec::<StackSymbol>::new();
         let mut remaining_input: Vec<Symbol> = program.iter().map(|x| x.clone()).rev().collect::<Vec<Symbol>>();
 
         while !remaining_input.is_empty()
         {
+            println!("handle: {:?}", handle);
+            println!("remaining_input: {:?}", remaining_input);
+
             let current_state = handle.last().map(|s| s.state).unwrap_or(0);
             let next_token = remaining_input.pop().unwrap();
             let temp = (current_state, next_token);
@@ -251,8 +235,8 @@ impl<'a> LRParser<'a>
                         }
                     );
                 },
-                Action::Reduce( (lhs, rhs) ) => {
-                    for item in rhs.iter().rev()
+                Action::Reduce( (lhs, rhs_id) ) => {
+                    for item in self.get_rhs(lhs, *rhs_id).unwrap().iter().rev()
                     {
                         assert_eq!(handle.pop().unwrap().symbol, *item);
                     }
@@ -265,26 +249,28 @@ impl<'a> LRParser<'a>
         Ok(())
     }
 
-    fn add_state(&'a mut self, kernel: BookmarkedRule<'a>)
+    fn add_state<'b>(&self, all_states:&mut Vec<State>, work_list: &mut Vec<u32>, kernel: Vec<BookmarkedRule>) -> u32 
     {
 
-        let mut potential_new_state = self.build_state(kernel, self.all_states.len() as u32);
-        if self.all_states.contains(&potential_new_state)
+        let potential_new_state = self.build_state(kernel, all_states.len() as u32);
+        if let Some(position) = all_states.iter().position( |state| *state == potential_new_state )
         {
-
+            return position as u32;
         }
         else
         {
-            self.all_states.push(potential_new_state);
+            let result = potential_new_state.id;
+            all_states.push(potential_new_state);
+            work_list.push(result);
+            return result;
         }
 
     }
 
     fn build_table(&mut self)
     {
-        let parse_table = HashMap::<(u32, Symbol), Action<'a>>::new();
         let mut all_states = Vec::<State>::new();
-        let mut work_list = Vec::<&State>::new();
+        let mut work_list = Vec::<u32>::new();
 
         // Push Start into known states. 
         let start_symbol = Symbol
@@ -292,37 +278,131 @@ impl<'a> LRParser<'a>
             label: String::from("Start"),
             terminal: false
         };
-        let rhs = &self.grammar.productions.get(&start_symbol).unwrap()[0];
-        let kernel = BookmarkedRule
+        let kernel = vec![BookmarkedRule
         {
             lhs: start_symbol,
-            rhs,
+            rhs_id: 0,
             bookmark: Some(0),
             goto: None
-        };
+        }];
         all_states.push(self.build_state(kernel, 0));
-        work_list.push(&all_states[0]);
+        work_list.push(0);
 
-        // main part
-        while let Some(state) = work_list.pop()
+        // SHIFTS 
+        while let Some(state_id) = work_list.pop()
         {
 
-            let rules_to_check = state.closure.iter().chain(vec![&state.kernel].into_iter());
+            let rules_to_check = all_states[state_id as usize].closure.iter().chain(all_states[state_id as usize].kernel.iter());
+            
+            let mut next_symbols = vec![];
 
-            for rule in rules_to_check
+            for rule in rules_to_check.clone()
             {
-                if let Some(next_symbol) = rule.bookmark.map(|index| &rule.rhs[index as usize])
+                if let Some(next_symbol) = rule.bookmark.map(|index| &self.get_rhs(&rule.lhs, rule.rhs_id).unwrap()[index as usize])
                 {
-                    // add command to shift and go to new state
-                    // self.parse_table.insert((state.id, next_symbol), Action::Shift());
+                    next_symbols.push(next_symbol.clone());
                 }
             }
 
+            next_symbols.sort();
+            next_symbols.dedup();
+
+            let mut new_kernels = next_symbols
+                .iter()
+                .map(|_x| (Vec::<u32>::new(), Vec::<BookmarkedRule>::new()))
+                .collect::<Vec<(Vec<u32>, Vec<BookmarkedRule>)>>();
+
+            for (rule_index, rule) in rules_to_check.enumerate()
+            {
+                let rhs = &self.get_rhs(&rule.lhs, rule.rhs_id).unwrap();
+                if let Some(next_symbol) = rule.bookmark.map(|index| &rhs[index as usize])
+                {
+                    if let Some(index) = next_symbols.iter().position(|symbol| symbol == next_symbol)
+                    {
+                        let new_bookmark = 
+                        if let Some(index) = rule.bookmark{
+                            if index == (rhs.len() as u32) - 1
+                            {
+                                None
+                            }
+                            else
+                            {
+                                Some(index + 1 as u32)
+                            }
+
+                        }
+                        else
+                        {
+                            None
+                        };
+                        new_kernels[index as usize].0.push(
+                            rule_index as u32
+                        );
+                        new_kernels[index as usize].1.push(BookmarkedRule{
+                            lhs: rule.lhs.clone(),
+                            rhs_id: rule.rhs_id,
+                            bookmark: new_bookmark,
+                            goto: None
+                        });
+                    }
+                }
+            }
+
+            for (kernel_index, (indices, mut kernel)) in new_kernels.into_iter().enumerate()
+            {
+                kernel.sort();
+                kernel.dedup();
+
+                let new_state_id = self.add_state(&mut all_states, &mut work_list, kernel);
+
+                for index in indices
+                {
+                    let old_state = &mut all_states[state_id as usize];
+                    old_state.closure.iter_mut().chain(old_state.kernel.iter_mut()).nth(index as usize).unwrap().goto = Some(new_state_id);
+                }
+                self.parse_table.insert( (state_id, next_symbols[kernel_index].clone()), Action::Shift(new_state_id));
+            }
         }
 
+        for (index, state) in all_states.iter().enumerate()
+        {
+            println!("\nState: {}", index);
+            state.print(&self.grammar);
+        }
 
-        self.parse_table = parse_table;
+        // REDUCES
+        for state in all_states.iter()
+        {
+            let rules_to_check = state.closure.iter().chain(state.kernel.iter());
+
+            for rule in rules_to_check{
+                if let None = rule.bookmark{
+                    for symbol in self.grammar.terminals.iter().chain(self.grammar.nonterminals.iter())
+                    {
+                        let table_tuple = (state.id, symbol.clone());
+                        if let Some(action) = self.parse_table.get( &table_tuple )
+                        {
+                            match action
+                            {
+                                Action::Shift(next_state) => {
+                                    panic!("Shift-reduce conflict at state {} with symbol {}.", state.id, symbol);
+                                },
+                                Action::Reduce(rule_id) => {
+                                    panic!("Reduce-reduce conflict at state {} with symbol {}.", state.id, symbol);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            self.parse_table.insert( table_tuple, Action::Reduce( (rule.lhs.clone(), rule.rhs_id) ));
+                        }
+                    }
+                }
+           }
+        }
+
     }
+
 
 }
 
@@ -339,22 +419,33 @@ fn test_closure()
                 terminal: false
             };
 
-        let kernel = BookmarkedRule
+        let kernel = vec![BookmarkedRule
         {
             lhs: lhs.clone(),
-            rhs: &grammar.productions.get(&lhs).unwrap()[0],
+            rhs_id: 0,
             bookmark: Some(1),
             goto: None
-        };
+        }];
 
 
-        println!("{}", parser.build_state(kernel, 0));
+        parser.build_state(kernel, 0).print(&grammar);
 }
 
 #[test]
+fn test_state_building()
+{
+    let grammar = Grammar::from_file("data/eeeee");
+    let parser = LRParser::new(grammar.clone()); 
+
+    for (key, value) in parser.parse_table.iter()
+    {
+        println!("({}, {}): {:?}", key.0, key.1, value);
+    }
+}
+#[test]
 fn test_neverending()
 {
-        let grammar = Grammar::from_file("data/eeeee");
+        let grammar = Grammar::from_file("data/self_referencing");
         let parser = LRParser::new(grammar.clone()); 
 
 
@@ -364,14 +455,14 @@ fn test_neverending()
                 terminal: false
             };
 
-        let kernel = BookmarkedRule
+        let kernel = vec![BookmarkedRule
         {
             lhs: lhs.clone(),
-            rhs: &grammar.productions.get(&lhs).unwrap()[0],
+            rhs_id: 0,
             bookmark: Some(0),
             goto: None
-        };
+        }];
 
-        println!("{}", parser.build_state(kernel, 0));
+        parser.build_state(kernel, 0).print(&grammar);
 
 }
