@@ -2,7 +2,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fs::read_to_string;
 use crate::symbol::Symbol;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Grammar
 {
     tokens_iter:VecDeque<String>,

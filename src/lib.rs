@@ -11,11 +11,12 @@ mod tests {
     use crate::ll_parser::LLParser;
     use crate::lr_parser::LRParser;
 
+
     #[test]
-    fn it_works() {
+    fn test_closure() {
         let grammar = Grammar::from_file("data/bnf");
-        println!("{:#?}", grammar);
-        let parser = LRParser::new(grammar); 
+        let parser = LRParser::new(grammar.clone()); 
+
         let program: Vec::<Symbol> = vec![];
         parser.parse(&program);
     }
