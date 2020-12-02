@@ -1,165 +1,136 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use crate::symbol::Symbol;
 use crate::grammar::Grammar;
 
 pub struct LLParser
 {
     grammar: Grammar,
-    lambda_deriving_symbols: HashSet<Symbol> 
+    // (LHS, next_token) -> rhs_id
+    parse_table: HashMap<(Symbol, Symbol), u32> 
 }
 
 impl LLParser
 {
     pub fn new(grammar: Grammar) -> LLParser
     {
+        
+        let parse_table = LLParser::build_parse_table(&grammar);
+
         LLParser{
-            grammar: grammar,
-            lambda_deriving_symbols: HashSet::<Symbol>::new()
+            grammar,
+            parse_table
         }
     }
 
-    fn generate_lambda_set(&mut self)
+    fn build_parse_table(grammar: &Grammar) -> HashMap<(Symbol, Symbol), u32>
     {
-        let mut previous_size = 0;
-        'prod_list: for (lhs, prod_list) in &self.grammar.productions
+        let mut out = HashMap::<(Symbol, Symbol), u32>::new();
+
+        for (lhs, prod_list) in &grammar.productions
         {
-            for prod in prod_list
+            for (rhs_id, production) in prod_list.iter().enumerate()
             {
-                if prod.is_empty()
+                let mut select_set = grammar.first_of_rhs(production);
+                if grammar.rhs_derives_lambda(&production)
                 {
-                    self.lambda_deriving_symbols.insert(lhs.clone());
-                    continue 'prod_list;
-                }
-            }
-        }
-        while self.lambda_deriving_symbols.len() != previous_size
-        {
-            previous_size = self.lambda_deriving_symbols.len().clone();
-            for (lhs, prod_list) in &self.grammar.productions
-            {
-                for prod in prod_list
-                {
-                    if self.rhs_derives_lambda(prod)
+                    for symbol in grammar.follow(lhs)
                     {
-                        self.lambda_deriving_symbols.insert(lhs.clone());
+                        select_set.insert(symbol);
                     }
                 }
-            }
 
-        }
-    }
-    pub fn rhs_derives_lambda(&self, rhs: &Vec<Symbol>) -> bool
-    {
-        for symbol in rhs
-        {
-            if !self.lambda_deriving_symbols.contains(&symbol)
-            {
-                return false;
-            }
-        }
-        true
-    }
-
-    pub fn follow(&self, s: &Symbol, visited: &mut HashSet<Symbol>) -> HashSet<Symbol>
-    {
-        let mut out = HashSet::<Symbol>::new();
-        if visited.contains(s)
-        {
-            return out;
-        }
-        visited.insert(s.clone());
-        for (lhs, prod_list) in &self.grammar.productions
-        {
-            for prod in prod_list
-            {
-                for (index, symbol) in prod.iter().enumerate()
+                for item in select_set
                 {
-                    if symbol == s
+                    let key = (lhs.clone(), item.clone());
+                    if out.contains_key(&key)
                     {
-                        let reduced_rhs = &prod[index+ 1..].to_vec();
-                        for first in self.first_of_rhs(reduced_rhs).into_iter()
-                        {
-                            out.insert(first);
-                        }
-                        if self.rhs_derives_lambda(reduced_rhs)
-                        {
-                            for follow in self.follow(lhs, visited ).into_iter()
-                            {
-                                out.insert(follow);
-                            }
-                        }
+                        panic!("Predict set conflict for non-terminal {} with next symbol {}.", lhs, item);
+                    }
+                    else
+                    {
+                        out.insert( key, rhs_id as u32 );
 
                     }
-
                 }
 
             }
+
         }
+
         out
     }
 
-    pub fn first_of_rhs(&self, rhs: &Vec<Symbol>) -> HashSet<Symbol>
+    pub fn parse(&self, program: String) -> Result<(), String>
     {
-        let mut out = HashSet::<Symbol>::new();
-        let mut visited = HashSet::<Symbol>::new();
-        'symbol: for symbol in rhs 
+
+        let mut stack = Vec::<Symbol>::new();
+        let mut remaining_input = program
+            .split_whitespace()
+            .map(|x| Symbol::from(x.to_string()) )
+            .rev()
+            .collect::<Vec<Symbol>>();
+
+        stack.push(
+            Symbol{
+                label: String::from("Start"),
+                terminal: false
+            }
+        );
+
+        while !stack.is_empty()
         {
-            if symbol.terminal
+            for symbol in stack.iter()
             {
-                out.insert(symbol.clone());
-                break 'symbol;
+                print!("{} ", symbol);
+            }
+            print!("\t\t\t");
+            for symbol in remaining_input.iter().rev()
+            {
+                print!(" {}", symbol);
+            }
+            println!("");
+
+            let expected = stack.pop().unwrap();
+
+            let lookahead = remaining_input
+                .last()
+                .ok_or(format!("Unexpected end of file; {} expected.", expected.label))?;
+
+            if expected.terminal
+            {
+                let incoming_token = remaining_input.pop().unwrap();
+                if incoming_token != expected
+                {
+                    return Err(format!("Unexpected_token {}; {} expected", incoming_token, expected));
+                }
             }
             else
             {
-                for first in self.first_of_symbol(symbol, &mut visited).into_iter()
+                
+                let key = (expected, lookahead.clone());
+                let rhs_id = self.parse_table
+                    .get(&key)
+                    .ok_or(format!("Unexpected token {}; {} expected.", lookahead, key.0))?.clone();
+                let (expected, _) = key;
+
+                for symbol in self.grammar.productions.get(&expected).unwrap()[rhs_id as usize].iter().rev()
                 {
-                    out.insert(first);
+                    stack.push(symbol.clone());
                 }
-                if !self.lambda_deriving_symbols.contains(symbol)
-                {
-                    break 'symbol;
-                }
+
             }
         }
-        out
-    }
 
-    pub fn first_of_symbol(&self, s: &Symbol, visited: &mut HashSet<Symbol>) -> HashSet<Symbol>
-    {
-        let mut out = HashSet::<Symbol>::new();
-        if visited.contains(s)
-        {
-            return out;
-        }
-        visited.insert(s.clone());
-        if s.terminal
-        {
-            out.insert(s.clone());
-            return out;
-        }
-
-        for rule in &self.grammar.productions[s]
-        {
-            'symbol: for symbol in rule
-            {
-                if symbol.terminal
-                {
-                    out.insert(symbol.clone());
-                    break 'symbol;
-                }
-                else
-                {
-                    for first in self.first_of_symbol(symbol, visited).into_iter()
-                    {
-                        out.insert(first);
-                    }
-                    if !self.lambda_deriving_symbols.contains(symbol)
-                    {
-                        break 'symbol;
-                    }
-                }
-            }
-        }
-        out
+        Ok(())
     }
+}
+
+#[test]
+fn test_ll()
+{
+    let grammar = Grammar::from_file("data/bnf");
+    let parser = LLParser::new(grammar.clone()); 
+
+    parser.parse(String::from("a b b d c $")).unwrap();
+
 }

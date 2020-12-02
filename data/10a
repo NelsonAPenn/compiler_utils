@@ -1,0 +1,7 @@
+Start -> S $ ;
+S -> id assign E semi ;
+E -> E plus P
+    | P ;
+P -> id
+    | lp E rp
+    | id assign E ;

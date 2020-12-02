@@ -2,6 +2,12 @@ use std::collections::{HashMap, HashSet};
 use crate::symbol::Symbol;
 use crate::grammar::Grammar;
 
+pub enum Mode
+{
+    LR0,
+    SLR
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct StackSymbol
 {
@@ -119,15 +125,17 @@ pub struct LRParser
 {
     grammar: Grammar,
     parse_table: HashMap<(u32, Option<Symbol>), Action >,
+    mode: Mode
 }
 
 impl LRParser
 {
-    pub fn new(grammar: Grammar) -> LRParser
+    pub fn new(grammar: Grammar, mode: Mode) -> LRParser
     {
         let mut parser = LRParser{
             grammar: grammar,
-            parse_table: HashMap::<(u32, Option<Symbol>), Action>::new()
+            parse_table: HashMap::<(u32, Option<Symbol>), Action>::new(),
+            mode
         };
 
         parser.build_table();
@@ -408,12 +416,28 @@ impl LRParser
 
             for rule in rules_to_check{
                 if let None = rule.bookmark{
-                    for symbol in self.grammar.terminals.iter()
-                        .chain(
-                            self.grammar.nonterminals.iter()
-                        )
-                        .map(|symbol| Some(symbol.clone()))
-                        .chain(vec![None].into_iter())
+
+                    let reduce_set = match &self.mode
+                    {
+                        Mode::LR0 => {
+                            self.grammar.terminals.iter()
+                                .chain(
+                                    self.grammar.nonterminals.iter()
+                                )
+                                .map(|symbol| Some(symbol.clone()))
+                                .chain(vec![None].into_iter())
+                                .collect::<HashSet<Option<Symbol>>>()
+                        },
+                        Mode::SLR => {
+                            self.grammar.follow(&rule.lhs).into_iter()
+                                .map(|symbol| Some(symbol))
+                                .chain(vec![None].into_iter())
+                                .collect::<HashSet<Option<Symbol>>>()
+                        }
+                    };
+
+
+                    for symbol in reduce_set
                     {
                         let table_tuple = (state.id, symbol);
                         if let Some(action) = self.parse_table.get( &table_tuple )
@@ -450,7 +474,7 @@ impl LRParser
 fn test_closure()
 {
         let grammar = Grammar::from_file("data/bnf");
-        let parser = LRParser::new(grammar.clone()); 
+        let parser = LRParser::new(grammar.clone(), Mode::LR0); 
 
 
         let lhs = Symbol
@@ -472,10 +496,43 @@ fn test_closure()
 }
 
 #[test]
+fn test_slr()
+{
+    let grammar = Grammar::from_file("data/bnf");
+    let parser = LRParser::new(grammar.clone(), Mode::SLR); 
+
+
+    for (key, value) in parser.parse_table.iter()
+    {
+        if let Some(symbol) = &key.1
+        {
+            println!("({}, {}): {:?}", key.0, symbol, value);
+        }
+        else
+        {
+            println!("({}, None): {:?}", key.0, value);
+
+        }
+    }
+
+    println!("Follow of B: {:?}", grammar.follow(
+        &Symbol{
+            label: String::from("B"),
+            terminal: false
+        }
+    ));
+
+    println!("Lambda-deriving symbols: {:?}", grammar.lambda_deriving_symbols);
+
+    parser.parse(String::from("a b b d c $")).unwrap();
+
+}
+
+#[test]
 fn test_state_building()
 {
     let grammar = Grammar::from_file("data/eeeee");
-    let parser = LRParser::new(grammar.clone()); 
+    let parser = LRParser::new(grammar.clone(), Mode::LR0); 
 
     for (key, value) in parser.parse_table.iter()
     {
@@ -498,7 +555,7 @@ fn test_state_building()
 fn test_neverending()
 {
         let grammar = Grammar::from_file("data/self_referencing");
-        let parser = LRParser::new(grammar.clone()); 
+        let parser = LRParser::new(grammar.clone(), Mode::LR0); 
 
 
         let lhs = Symbol
