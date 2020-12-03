@@ -65,7 +65,7 @@ impl BookmarkedRule
         }
         if let Some(goto) = self.goto
         {
-            print!(" goto {}", goto);
+            print!("    goto {}", goto);
         }
 
     }
@@ -309,6 +309,7 @@ impl LRParser
     {
         let mut all_states = Vec::<State>::new();
         let mut work_list = Vec::<u32>::new();
+        let mut error_messages = Vec::<String>::new();
 
         // Push Start into known states. 
         let start_symbol = Symbol
@@ -446,13 +447,13 @@ impl LRParser
                             match action
                             {
                                 Action::Shift(_next_state) => {
-                                    panic!("Shift-reduce conflict at state {} with symbol {:?}.", state.id, symbol);
+                                    error_messages.push(format!("Shift-reduce conflict at state {} with symbol {:?}.", state.id, symbol));
                                 },
                                 Action::Reduce(_rule_id) => {
-                                    panic!("Reduce-reduce conflict at state {} with symbol {:?}.", state.id, symbol);
+                                    error_messages.push(format!("Reduce-reduce conflict at state {} with symbol {:?}.", state.id, symbol));
                                 },
                                 Action::Accept => {
-                                    panic!("What in the world!?");
+                                    error_messages.push(String::from("What in the world!?"));
                                 }
                             }
                         }
@@ -464,6 +465,19 @@ impl LRParser
                 }
            }
         }
+
+        if !error_messages.is_empty()
+        {
+            let mut error_string = String::from("\n");
+            for message in error_messages
+            {
+                error_string += &message[..];
+                error_string += "\n";
+            }
+
+            panic!(error_string);
+        }
+
 
     }
 
@@ -515,17 +529,16 @@ fn test_slr()
         }
     }
 
-    println!("Follow of B: {:?}", grammar.follow(
-        &Symbol{
-            label: String::from("B"),
-            terminal: false
-        }
-    ));
-
-    println!("Lambda-deriving symbols: {:?}", grammar.lambda_deriving_symbols);
-
     parser.parse(String::from("a b b d c $")).unwrap();
 
+}
+
+#[should_panic]
+#[test]
+fn multiple_conflicts_reported()
+{
+    let grammar = Grammar::from_file("data/10a");
+    let _parser = LRParser::new(grammar, Mode::LR0);
 }
 
 #[test]
