@@ -411,6 +411,7 @@ impl LRParser
 
         // REDUCES
         self.parse_table.insert( (0, Some(start_symbol)), Action::Accept);
+
         for state in all_states.iter()
         {
             let rules_to_check = state.closure.iter().chain(state.kernel.iter());
@@ -423,7 +424,7 @@ impl LRParser
                         Mode::LR0 => {
                             self.grammar.terminals.iter()
                                 .chain(
-                                    self.grammar.nonterminals.iter()
+                                    self.grammar.nonterminals.iter().filter(|x| x.label != "Start")
                                 )
                                 .map(|symbol| Some(symbol.clone()))
                                 .chain(vec![None].into_iter())
@@ -453,7 +454,7 @@ impl LRParser
                                     error_messages.push(format!("Reduce-reduce conflict at state {} with symbol {:?}.", state.id, symbol));
                                 },
                                 Action::Accept => {
-                                    error_messages.push(String::from("What in the world!?"));
+                                    error_messages.push(format!("What in the world!? State {}, symbol {:?}", state.id, symbol));
                                 }
                             }
                         }
@@ -484,8 +485,9 @@ impl LRParser
 
 }
 
+#[should_panic]
 #[test]
-fn test_closure()
+fn test_lr0_failure()
 {
         let grammar = Grammar::from_file("data/bnf");
         let parser = LRParser::new(grammar.clone(), Mode::LR0); 
@@ -510,7 +512,7 @@ fn test_closure()
 }
 
 #[test]
-fn test_slr()
+fn test_slr_success()
 {
     let grammar = Grammar::from_file("data/bnf");
     let parser = LRParser::new(grammar.clone(), Mode::SLR); 
