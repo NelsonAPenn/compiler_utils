@@ -424,7 +424,8 @@ impl LRParser
                         Mode::LR0 => {
                             self.grammar.terminals.iter()
                                 .chain(
-                                    self.grammar.nonterminals.iter().filter(|x| x.label != "Start")
+                                    self.grammar.nonterminals.iter()
+                                    .filter(|x| x.label != "Start")
                                 )
                                 .map(|symbol| Some(symbol.clone()))
                                 .chain(vec![None].into_iter())
