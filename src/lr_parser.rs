@@ -591,3 +591,35 @@ fn test_neverending()
         parser.build_state(kernel, 0).print(&grammar);
 
 }
+
+#[test]
+fn q2()
+{
+    let grammar = Grammar::from_file("data/q2");
+    let parser = LRParser::new(grammar.clone(), Mode::SLR); 
+
+}
+
+#[test]
+fn test_base()
+{
+    let grammar = Grammar::from_file("data/base");
+    let parser = LRParser::new(grammar.clone(), Mode::SLR); 
+
+
+    for (key, value) in parser.parse_table.iter()
+    {
+        if let Some(symbol) = &key.1
+        {
+            println!("({}, {}): {:?}", key.0, symbol, value);
+        }
+        else
+        {
+            println!("({}, None): {:?}", key.0, value);
+
+        }
+    }
+
+    parser.parse(String::from("d x d d d $")).unwrap();
+
+}
