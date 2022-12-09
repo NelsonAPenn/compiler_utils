@@ -1,0 +1,12 @@
+Start -> DS SS ;
+DS -> D DS | ;
+D -> f id | i id ;
+SS -> S SS | ;
+S -> id = E
+    | p id ;
+E -> T + E
+    | T ;
+T -> T * F 
+    | F ;
+F -> ( E )
+    | n ;

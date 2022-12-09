@@ -1,0 +1,4 @@
+Start -> Num $ ;
+Num -> Digs | 
+d x Digs ;
+Digs -> Digs d | d ;
